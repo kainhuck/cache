@@ -1,28 +1,42 @@
 package cache
 
 import (
+	"context"
 	"log"
 	"sync"
 	"time"
 )
+
+type CallBackFunc func(key string, value interface{})
 
 type Cache struct {
 	container         map[string]*item // 用于存放数据的容器
 	mutex             sync.Mutex
 	defaultExpiration time.Duration
 	cleanupInterval   time.Duration
+	ctx               context.Context
+
+	beforeDelete []CallBackFunc
 }
 
-func New(defaultExpiration, cleanupInterval time.Duration) *Cache {
+func New(ctx context.Context, defaultExpiration, cleanupInterval time.Duration) *Cache {
 	c := &Cache{
 		container:         make(map[string]*item),
 		mutex:             sync.Mutex{},
 		defaultExpiration: defaultExpiration,
 		cleanupInterval:   cleanupInterval,
+		ctx:               ctx,
+
+		beforeDelete: make([]CallBackFunc, 0),
 	}
 	go c.run()
 
 	return c
+}
+
+// 注册回调
+func (c *Cache) RegisterBeforeDelete(f ...CallBackFunc) {
+	c.beforeDelete = append(c.beforeDelete, f...)
 }
 
 // 存值并指定过期时间
@@ -37,7 +51,7 @@ func (c *Cache) Set(key string, value interface{}, d time.Duration) {
 	log.Println("SET SUCCESS", key)
 }
 
-// 使用m默认的过期时间
+// 使用默认的过期时间
 func (c *Cache) SetByDefaultExpiration(key string, value interface{}) {
 	c.Set(key, value, c.defaultExpiration)
 }
@@ -64,17 +78,30 @@ func (c *Cache) Grow(key string, d time.Duration) {
 	}
 }
 
+// for循环
+func (c *Cache) For(f CallBackFunc)  {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	for k, v := range c.container{
+		f(k, v.value)
+	}
+}
+
 // 清除过期的item
 func (c *Cache) cleanup() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	for key, item := range c.container {
 		if item.isExpired() {
+			if len(c.beforeDelete) > 0 {
+				for _, f := range c.beforeDelete{
+					f(key, item.value)
+				}
+			}
 			delete(c.container, key)
 		}
 	}
 }
-
 
 func (c *Cache) run() {
 	ticker := time.NewTicker(c.cleanupInterval)
@@ -82,6 +109,8 @@ func (c *Cache) run() {
 		select {
 		case <-ticker.C:
 			c.cleanup()
+		case <- c.ctx.Done():
+			return
 		}
 	}
 }
