@@ -2,7 +2,6 @@ package cache
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
 )
@@ -48,7 +47,6 @@ func (c *Cache) Set(key string, value interface{}, d time.Duration) {
 		value:     value,
 		expiredAt: time.Now().Add(d),
 	}
-	log.Println("SET SUCCESS", key)
 }
 
 // 使用默认的过期时间
