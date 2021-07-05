@@ -76,6 +76,16 @@ func (c *Cache) Grow(key string, d time.Duration) {
 	}
 }
 
+// 从缓存中删除
+func (c *Cache) Delete(key string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	_, ok := c.container[key]
+	if ok {
+		delete(c.container, key)
+	}
+}
+
 // for循环
 func (c *Cache) For(f CallBackFunc)  {
 	c.mutex.Lock()
@@ -96,7 +106,7 @@ func (c *Cache) cleanup() {
 					f(key, item.value)
 				}
 			}
-			delete(c.container, key)
+			c.Delete(key)
 		}
 	}
 }
