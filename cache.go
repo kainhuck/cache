@@ -80,8 +80,11 @@ func (c *Cache) Grow(key string, d time.Duration) {
 func (c *Cache) Delete(key string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	_, ok := c.container[key]
+	item, ok := c.container[key]
 	if ok {
+		for _, f := range c.beforeDelete{
+			f(key, item.value)
+		}
 		delete(c.container, key)
 	}
 }
@@ -101,11 +104,6 @@ func (c *Cache) cleanup() {
 	defer c.mutex.Unlock()
 	for key, item := range c.container {
 		if item.isExpired() {
-			if len(c.beforeDelete) > 0 {
-				for _, f := range c.beforeDelete{
-					f(key, item.value)
-				}
-			}
 			c.Delete(key)
 		}
 	}
